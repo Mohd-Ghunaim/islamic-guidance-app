@@ -1,29 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-
-const socket = io('http://localhost:5000'); 
 
 export default function Chat() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [aiResponse, setAiResponse] = useState('');
+  const socketRef = useRef(null);
 
   useEffect(() => {
-    socket.on('ai_response', (data) => {
+    socketRef.current = io('http://localhost:5000');
+
+    socketRef.current.on('connect', () => {
+      console.log('Socket connected:', socketRef.current.id);
+    });
+
+    socketRef.current.on('disconnect', () => {
+      console.log('Socket disconnected');
+    });
+
+    socketRef.current.on('ai_response', (data) => {
       setAiResponse(prev => prev + data.chunk);
     });
 
     return () => {
-      socket.off('ai_response');
+      socketRef.current.disconnect();
     };
   }, []);
 
   const sendMessage = () => {
     if (!input.trim()) return;
 
+    console.log('Sending user_message:', input);
     setMessages(prev => [...prev, { sender: 'user', text: input }]);
     setAiResponse('');
-    socket.emit('user_message', { message: input });
+    socketRef.current.emit('user_message', { message: input });
     setInput('');
   };
 
