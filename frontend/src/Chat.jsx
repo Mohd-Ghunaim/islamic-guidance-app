@@ -57,7 +57,7 @@ export default function Chat() {
       }}>
         {messages.map((msg, idx) => (
           <div key={idx} style={{
-            color: msg.sender === 'AI' ? 'blue' : 'black',
+            color: msg.sender === 'AI' ? 'green' : 'black',
             margin: '0.5rem 0'
           }}>
             <strong>{msg.sender}:</strong> {msg.text}
