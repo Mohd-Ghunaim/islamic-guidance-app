@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from textblob import TextBlob
@@ -20,22 +20,31 @@ SYSTEM_PROMPT = (
     "Offer duaa suggestions when needed. Never give un-Islamic advice or opinions on fiqh questions."
 )
 
+# Store chat history per user session
+conversations = {}
+
 @socketio.on('user_message')
 def handle_message(data):
-    print("Received 'user_message' event")
+    sid = request.sid
     user_msg = data.get("message", "")
     sentiment = TextBlob(user_msg).sentiment.polarity
-    print(f"User: {user_msg} | Sentiment: {sentiment:.2f}")
+    print(f"User({sid}): {user_msg} | Sentiment: {sentiment:.2f}")
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_msg}
-    ]
+    if sid not in conversations:
+        conversations[sid] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    conversations[sid].append({"role": "user", "content": user_msg})
+
+    # Send user's own message back so frontend shows it instantly
+    emit("chat_message", {"sender": "You", "text": user_msg})
+
+    # Create placeholder AI message so frontend starts "typing"
+    emit("chat_message", {"sender": "AI", "text": ""})
 
     response = client.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=messages,
-    stream=True
+        model="gpt-3.5-turbo",
+        messages=conversations[sid],
+        stream=True
     )
 
     full_reply = ""
@@ -43,24 +52,10 @@ def handle_message(data):
         if chunk.choices and chunk.choices[0].delta.content:
             token = chunk.choices[0].delta.content
             full_reply += token
-            emit("ai_response", {"chunk": token})
+            # Send each chunk to update the latest AI message
+            emit("update_last_ai", {"text": full_reply})
 
-    print(f"AI: {full_reply}")
-'''
-@socketio.on('user_message')
-def handle_message(data):
-    user_msg = data.get("message", "")
-    sentiment = TextBlob(user_msg).sentiment.polarity
-    print(f"User: {user_msg} | Sentiment: {sentiment:.2f}")
-
-    # MOCK RESPONSE (remove this when you have quota again)
-    full_reply = "This is a mocked reply. Your message was received."
-
-    # Send mocked response back in chunks
-    for char in full_reply:
-        emit("ai_response", {"chunk": char})
-
-    print(f"AI: {full_reply}")'''
+    conversations[sid].append({"role": "assistant", "content": full_reply})
 
 if __name__ == "__main__":
     socketio.run(app, port=5000)
